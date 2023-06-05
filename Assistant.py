@@ -1,6 +1,6 @@
 import argparse
 from library.SWGassistant.SwgAssistant import SwgAuditAssistant
-
+print("Dev")
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Detects unused and disabled configuration items in Secure Web Gateway configuration.')
     parser.add_argument('backupfile', default="xml.backup", type=str, help='Backup file from SWG.')
@@ -18,5 +18,5 @@ if __name__ == '__main__':
     print(f"[*] [Info] Generating Reports.") if args.v else None
     swg.doReport()
     print(f"[*] [Info] Done!") if args.v else None
-    #
+    
 
