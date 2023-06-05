@@ -2,11 +2,16 @@
 import xml.etree.ElementTree as ET
 from glob import glob
 import argparse
-from os import path, mkdir
+from os import path, mkdir, remove
 from library.SWGunpack.SwgUnpack import SwgUnpack
 import csv
 from shutil import rmtree, move
 from datetime import datetime
+from urllib.request import build_opener, HTTPSHandler
+import ssl
+from urllib.parse import urlencode
+from getpass import getpass
+import urllib
 
 # Class Definition
 class SwgAuditAssistant:
@@ -19,22 +24,24 @@ class SwgAuditAssistant:
         self.listExceptions = ""
         self.URL = ""
         self.FILE = ""
+        self.stamp = datetime.strftime(datetime.now(), "%Y_%m_%d-%H_%M")
+        self.USERNAME = ""
     
     def start(self):
         if (self.FILE != "") and (self.FILE.endswith(".backup")):
             self.offline(self.FILE)
             return
         elif (self.URL != "") and (self.URL.startswith("http")):
-            self.online(self.URL)
+            self.online()
             return
         print("Please provide a valid backup name or API URL.")
         exit()
 
-    def online(self, URL):
-        # Pobierz config z urządzenia za pomocą API
-        # Rozpakuj pobrany config za pomocą SwgUnpack()
-        # Pobierz sciezke konfiguracji uzywajac _get_baseCfgPath()
-        pass
+    def online(self):
+        # Login, download backup and logout
+        self._logout(self.downloadBackup(self._login()))
+        # Proceed offline
+        self.offline(self.FILE)
 
     def offline(self, configXmlFile):
         self._fileExists(configXmlFile)
@@ -97,6 +104,8 @@ class SwgAuditAssistant:
             self.unusedLists = self._handleUserExceptions(self.unusedLists)
         
     def _cleanup(self):
+        if path.isfile("cookies.txt"):
+            remove("cookies.txt")
         if path.exists("default"):
             rmtree("default")
 
@@ -124,12 +133,11 @@ class SwgAuditAssistant:
         return [self._getAttributeValueFromXml(cfgPath) for cfgPath in unusedSettingsPaths]
 
     def _archiveOldReports(self):
-        stamp = datetime.strftime(datetime.now(), "%Y_%m_%d-%H_%M")
         # handle disabledRules.csv
         mkdir("archivedReports") if not path.isdir("archivedReports") else None
-        move("disabledRules.csv", f"archivedReports/{stamp}_disabledRules.csv") if path.isfile("disabledRules.csv") else None
-        move("unusedSettings.csv", f"archivedReports/{stamp}_unusedSettings.csv") if path.isfile("unusedSettings.csv") else None
-        move("unusedLists.csv", f"archivedReports/{stamp}_unusedLists.csv") if path.isfile("unusedLists.csv") else None
+        move("disabledRules.csv", f"archivedReports/{self.stamp}_disabledRules.csv") if path.isfile("disabledRules.csv") else None
+        move("unusedSettings.csv", f"archivedReports/{self.stamp}_unusedSettings.csv") if path.isfile("unusedSettings.csv") else None
+        move("unusedLists.csv", f"archivedReports/{self.stamp}_unusedLists.csv") if path.isfile("unusedLists.csv") else None
 
     def _handleUserExceptions(self, items):
         if self.exceptions != None:
@@ -144,6 +152,54 @@ class SwgAuditAssistant:
         if not path.isfile(file):
             print(f"{file} - Provided file does not exists!")
             exit()
+    
+    def _login(self):
+        # Logowanie
+        if self.USERNAME in ("", None):
+            print("[*] Please provide a username!")
+            exit()
+        USER=self.USERNAME
+        password = getpass()
+        PASS="{}".format(password)
+        URL=f"{self.URL}/Konfigurator/REST/login"
+        # parametry zapytania
+        params = {"userName": USER, "pass": PASS}
+        data = urlencode(params).encode('utf-8')
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        # utworzenie niestandardowego obiektu opener, ktory uzyje kontekstu SSL
+        opener = build_opener(HTTPSHandler(context=context))
+        try:
+            response = opener.open(URL, data)
+            cookies = response.getheader('Set-Cookie')
+        except urllib.error.HTTPError:
+            print("[*] Cannot connect to the device. Validate your credentials and check if the device is up.")
+            exit()
+        # zapisanie ciastka do pliku
+        if cookies:
+            with open('cookies.txt', 'w') as f:
+                f.write(cookies)
+        return opener
+    
+    def _logout(self, opener):
+        URL = f"{self.URL}/Konfigurator/REST/logout"
+        data = urlencode("").encode('utf-8')
+        opener.open(URL, data)
+    
+    def downloadBackup(self, opener):
+        # Load cookies from txt file
+        with open('cookies.txt', 'r') as f:
+            cookies = f.read().strip()
+        opener.addheaders.append(('Cookie', cookies))
+        URL = f"{self.URL}/Konfigurator/REST/backup"
+        data = urlencode("").encode('utf-8')
+        # Download backupfile
+        self.FILE = f"{self.stamp}config.backup"
+        with open(self.FILE, 'w') as file:
+            backup = opener.open(URL, data)
+            file.write(backup.read().decode())
+        return opener
             
 if __name__ == "__main__":
     pass
