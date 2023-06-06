@@ -76,11 +76,11 @@ class SwgAuditAssistant:
 
     def _detectUnusedSettings(self):
         settingsNames = self._getXmlFromDir("cfg")
-        # Wyciagnij enableEngineActionContainer
+        # Extract enableEngineActionContainer
         temp_usedSettings_1 = [action.get("configurationId") for action in self._getFromPolicyFile("enableEngineActionContainer") if action.get("configurationId") != None]
-        # Wyciagnij executeActionContainer
+        # Extract executeActionContainer
         temp_usedSettings_2 = [action.get("configurationId") for action in self._getFromPolicyFile("executeActionContainer") if action.get("configurationId") != None]
-        # Wyciagnij propertyInstance
+        # Extract propertyInstance
         temp_usedSettings_3 = [action.get("configurationId") for action in self._getFromPolicyFile("propertyInstance") if action.get("configurationId") != None]
         self.unusedSettings = list(((set(settingsNames) - set(temp_usedSettings_1)) - set(temp_usedSettings_2)) - set(temp_usedSettings_3))
         self.unusedSettings = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedSettings)
@@ -128,7 +128,7 @@ class SwgAuditAssistant:
         return settingsFile.getroot().get("name")
 
     def _resolveSettingsNames(self, pathsOfxmlFiles, unusedNames):
-        # sciezki do nieuzywanych plikow z ustawieniami
+        # Paths to the files with unused settings
         unusedSettingsPaths = [element for element in pathsOfxmlFiles if any(nazwa in element for nazwa in unusedNames)]
         return [self._getAttributeValueFromXml(cfgPath) for cfgPath in unusedSettingsPaths]
 
@@ -154,7 +154,7 @@ class SwgAuditAssistant:
             exit()
     
     def _login(self):
-        # Logowanie
+        # login
         if self.USERNAME in ("", None):
             print("[*] Please provide a username!")
             exit()
@@ -162,13 +162,13 @@ class SwgAuditAssistant:
         password = getpass()
         PASS="{}".format(password)
         URL=f"{self.URL}/Konfigurator/REST/login"
-        # parametry zapytania
+        # query parameters
         params = {"userName": USER, "pass": PASS}
         data = urlencode(params).encode('utf-8')
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
-        # utworzenie niestandardowego obiektu opener, ktory uzyje kontekstu SSL
+        # opener object init
         opener = build_opener(HTTPSHandler(context=context))
         try:
             response = opener.open(URL, data)
@@ -176,7 +176,7 @@ class SwgAuditAssistant:
         except urllib.error.HTTPError:
             print("[*] Cannot connect to the device. Validate your credentials and check if the device is up.")
             exit()
-        # zapisanie ciastka do pliku
+        # write cookies to the file
         if cookies:
             with open('cookies.txt', 'w') as f:
                 f.write(cookies)
