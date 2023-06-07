@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('-sx', '--settings-exceptions', help="Enables specific exceptions on the settings.")
     parser.add_argument('-r', help="Enables general exceptions on the rules.", action='store_true')
     parser.add_argument('-rx', '--rules-exceptions', help="Enables specific exceptions on the rules.")
-    parser.add_argument('-u', '--username', type=str, help="Username to SWG Rest API.")
+    parser.add_argument('-u', '--username', type=str, help="Username for SWG Rest API.")
     args = parser.parse_args()
 
     print(f"[*] [Info] Analyzing configuration backup: {args.backupfile}") if args.v else None
