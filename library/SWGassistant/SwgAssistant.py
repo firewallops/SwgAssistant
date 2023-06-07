@@ -15,17 +15,26 @@ import urllib
 
 # Class Definition
 class SwgAuditAssistant:
-    def __init__(self) -> None:
+    def __init__(self, args) -> None:
         self._baseCfgPath = ""
         self._settingsXmlFileNames = ""
         self._settingsNames = ""
         self._policyXmlLoaded = False
-        self.exceptions = ""
-        self.listExceptions = ""
+        self.exceptions = args.exceptions
+        self.listFlag = args.l
+        self.ruleFlag = args.r
+        self.settingsFlag = args.s
+        self.listExceptions = args.lists_exceptions
+        self.ruleExceptions = args.rules_exceptions
+        self.settingsExceptions = args.settings_exceptions
         self.URL = ""
         self.FILE = ""
         self.stamp = datetime.strftime(datetime.now(), "%Y_%m_%d-%H_%M")
-        self.USERNAME = ""
+        self.USERNAME = args.username
+        if args.backupfile.startswith("http"):
+            self.URL = args.backupfile
+        else:
+            self.FILE = args.backupfile
     
     def start(self):
         if (self.FILE != "") and (self.FILE.endswith(".backup")):
@@ -46,10 +55,7 @@ class SwgAuditAssistant:
     def offline(self, configXmlFile):
         self._fileExists(configXmlFile)
         self.FILE = configXmlFile
-        if self.exceptions is not None:        
-            self._fileExists(self.exceptions)  
-            if self.listExceptions != True:
-                print("[*] [Warning] Don't know where to apply the exceptions! Skipping.")      
+        self._validateArguments()       
         args = argparse.Namespace(backupfile=configXmlFile, outpath='.', v=False)
         SwgUnpack(args)
         self._get_baseCfgPath()
@@ -58,6 +64,24 @@ class SwgAuditAssistant:
             self._detectDisabledRules()
             self._detectUnusedLists()
             self._cleanup()
+
+    def _validateArguments(self):
+        if self.exceptions is not None:
+            self._fileExists(self.exceptions)
+            if not any([self.listFlag, self.ruleFlag, self.settingsFlag]):
+                print("[*] [Warning] Don't know where to apply the general exceptions! Skipping.")
+        if self.listExceptions is not None:
+            self._fileExists(self.listExceptions)
+        if self.settingsExceptions is not None:
+            self._fileExists(self.settingsExceptions)
+        if self.ruleExceptions is not None:
+            self._fileExists(self.ruleExceptions)
+        if self.listFlag and self.listExceptions:
+            print("[*] [Warning] [Lists] Specific exceptions will override general exceptions!")
+        if self.settingsFlag and self.settingsExceptions:
+            print("[*] [Warning] [Settings] Specific exceptions will override general exceptions!")
+        if self.ruleFlag and self.ruleExceptions:
+            print("[*] [Warning] [Rules] Specific exceptions will override general exceptions!")
 
     def _get_baseCfgPath(self):
         if path.exists("default"):
@@ -84,6 +108,10 @@ class SwgAuditAssistant:
         temp_usedSettings_3 = [action.get("configurationId") for action in self._getFromPolicyFile("propertyInstance") if action.get("configurationId") != None]
         self.unusedSettings = list(((set(settingsNames) - set(temp_usedSettings_1)) - set(temp_usedSettings_2)) - set(temp_usedSettings_3))
         self.unusedSettings = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedSettings)
+        if self.settingsFlag and self.settingsExceptions == None:
+            self.unusedSettings = self._handleUserExceptions(self.unusedSettings, self.exceptions)
+        elif self.settingsExceptions:
+            self.unusedSettings = self._handleUserExceptions(self.unusedSettings, self.settingsExceptions)
     
     def _detectDisabledRules(self):
         ruleGroups = self._getFromPolicyFile("ruleGroup")
@@ -94,14 +122,20 @@ class SwgAuditAssistant:
         for rule in rules:
             if rule.get("enabled") == "false":
                 self.disabledRules.append(rule.get("name"))
+        if self.ruleFlag and self.ruleExceptions == None:
+            self.disabledRules = self._handleUserExceptions(self.disabledRules, self.exceptions)
+        elif self.ruleExceptions:
+            self.disabledRules = self._handleUserExceptions(self.disabledRules, self.ruleExceptions)
     
     def _detectUnusedLists(self):
         usedLists = [usedList.get("id") for usedList in self._getFromPolicyFile("listValue") if usedList.get("id") != None]
         listsXmlFileNames = self._getXmlFromDir("lists")
         self.unusedLists = list(set(listsXmlFileNames) - set(usedLists))
         self.unusedLists = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedLists)
-        if self.listExceptions:
-            self.unusedLists = self._handleUserExceptions(self.unusedLists)
+        if self.listFlag and self.listExceptions == None:
+            self.unusedLists = self._handleUserExceptions(self.unusedLists, self.exceptions)
+        elif self.listExceptions:
+            self.unusedLists = self._handleUserExceptions(self.unusedLists, self.listExceptions)
         
     def _cleanup(self):
         if path.isfile("cookies.txt"):
@@ -139,9 +173,9 @@ class SwgAuditAssistant:
         move("unusedSettings.csv", f"archivedReports/{self.stamp}_unusedSettings.csv") if path.isfile("unusedSettings.csv") else None
         move("unusedLists.csv", f"archivedReports/{self.stamp}_unusedLists.csv") if path.isfile("unusedLists.csv") else None
 
-    def _handleUserExceptions(self, items):
-        if self.exceptions != None:
-            with open(self.exceptions, "r") as file:
+    def _handleUserExceptions(self, items, user_exceptions):
+        if user_exceptions != None:
+            with open(user_exceptions, "r") as file:
                 exceptions = file.read().split("\n")
             for exception in exceptions:
                 items = [item for item in items if item.find(exception) == -1]
