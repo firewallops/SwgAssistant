@@ -106,8 +106,11 @@ class SwgAuditAssistant:
         temp_usedSettings_2 = [action.get("configurationId") for action in self._getFromPolicyFile("executeActionContainer") if action.get("configurationId") != None]
         # Extract propertyInstance
         temp_usedSettings_3 = [action.get("configurationId") for action in self._getFromPolicyFile("propertyInstance") if action.get("configurationId") != None]
-        self.unusedSettings = list(((set(settingsNames) - set(temp_usedSettings_1)) - set(temp_usedSettings_2)) - set(temp_usedSettings_3))
-        self.unusedSettings = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedSettings)
+        # Extract actionContainer
+        temp_usedSettings_4 = [action.get("configurationId") for action in self._getFromPolicyFile("actionContainer") if action.get("configurationId") != None]
+        temp_usedSettings = temp_usedSettings_1 + temp_usedSettings_2 + temp_usedSettings_3 + temp_usedSettings_4
+        self.unusedSettingsIDs = list(set(settingsNames) - set(temp_usedSettings))
+        self.unusedSettings, self.unusedSettingsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedSettingsIDs)
         if self.settingsFlag and self.settingsExceptions == None:
             self.unusedSettings = self._handleUserExceptions(self.unusedSettings, self.exceptions)
         elif self.settingsExceptions:
@@ -130,8 +133,8 @@ class SwgAuditAssistant:
     def _detectUnusedLists(self):
         usedLists = [usedList.get("id") for usedList in self._getFromPolicyFile("listValue") if usedList.get("id") != None]
         listsXmlFileNames = self._getXmlFromDir("lists")
-        self.unusedLists = list(set(listsXmlFileNames) - set(usedLists))
-        self.unusedLists = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedLists)
+        self.unusedListsIDs = list(set(listsXmlFileNames) - set(usedLists))
+        self.unusedLists, self.unusedListsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedListsIDs)
         if self.listFlag and self.listExceptions == None:
             self.unusedLists = self._handleUserExceptions(self.unusedLists, self.exceptions)
         elif self.listExceptions:
@@ -146,16 +149,21 @@ class SwgAuditAssistant:
     def doReport(self):
         if self._policyXmlLoaded:
             self._archiveOldReports()
-            self._writeResults("unusedSettings.csv", "Unused Setting Name", self.unusedSettings)
+            self._writeResults("unusedSettings.csv", "Unused Setting Name", self.unusedSettings, self.unusedSettingsIDs)
             self._writeResults("disabledRules.csv", "Disabled Rule Name", self.disabledRules)
-            self._writeResults("unusedLists.csv", "Unused List Name", self.unusedLists)
+            self._writeResults("unusedLists.csv", "Unused List Name", self.unusedLists, self.unusedListsIDs)
 
-    def _writeResults(self, outfile, header, values):
+    def _writeResults(self, outfile, header, values, ids=None):
         with open(outfile, "w", newline="") as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow([header])
-            for row in values:
-                writer.writerow([row])
+            if ids:
+                writer.writerow([header, "ID"])
+                for entry in zip(values, ids):
+                    writer.writerow(entry)
+            else:
+                writer.writerow([header])
+                for row in values:
+                    writer.writerow([row])
     
     def _getAttributeValueFromXml(self, PATH):
         settingsFile = ET.parse(PATH)
@@ -164,7 +172,7 @@ class SwgAuditAssistant:
     def _resolveSettingsNames(self, pathsOfxmlFiles, unusedNames):
         # Paths to the files with unused settings
         unusedSettingsPaths = [element for element in pathsOfxmlFiles if any(nazwa in element for nazwa in unusedNames)]
-        return [self._getAttributeValueFromXml(cfgPath) for cfgPath in unusedSettingsPaths]
+        return [self._getAttributeValueFromXml(cfgPath) for cfgPath in unusedSettingsPaths], [s.split("/")[-1].rstrip(".xml") for s in unusedSettingsPaths]
 
     def _archiveOldReports(self):
         # handle disabledRules.csv
