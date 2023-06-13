@@ -63,7 +63,7 @@ class SwgAuditAssistant:
             self._detectUnusedSettings()
             self._detectDisabledRules()
             self._detectUnusedLists()
-            #self._cleanup()
+            self._cleanup()
 
     def _validateArguments(self):
         if self.exceptions is not None:
