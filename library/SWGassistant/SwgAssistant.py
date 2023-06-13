@@ -63,7 +63,7 @@ class SwgAuditAssistant:
             self._detectUnusedSettings()
             self._detectDisabledRules()
             self._detectUnusedLists()
-            self._cleanup()
+            #self._cleanup()
 
     def _validateArguments(self):
         if self.exceptions is not None:
@@ -109,8 +109,9 @@ class SwgAuditAssistant:
         # Extract actionContainer
         temp_usedSettings_4 = [action.get("configurationId") for action in self._getFromPolicyFile("actionContainer") if action.get("configurationId") != None]
         temp_usedSettings = temp_usedSettings_1 + temp_usedSettings_2 + temp_usedSettings_3 + temp_usedSettings_4
-        self.unusedSettingsIDs = list(set(settingsNames) - set(temp_usedSettings))
-        self.unusedSettings, self.unusedSettingsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedSettingsIDs)
+        unusedSettingsIDs = list(set(settingsNames) - set(temp_usedSettings))
+        self.unusedSettings, unusedSettingsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, unusedSettingsIDs)
+        self.unusedSettings = [entry for entry in zip(self.unusedSettings, unusedSettingsIDs)]
         if self.settingsFlag and self.settingsExceptions == None:
             self.unusedSettings = self._handleUserExceptions(self.unusedSettings, self.exceptions)
         elif self.settingsExceptions:
@@ -119,12 +120,12 @@ class SwgAuditAssistant:
     def _detectDisabledRules(self):
         ruleGroups = self._getFromPolicyFile("ruleGroup")
         self.ruleGroups = [group.get("name") for group in ruleGroups]
-        self.disabledRules = [group.get("name") for group in ruleGroups if group.get("enabled") == "false"]
+        self.disabledRules = [(group.get("name"), group.get("id")) for group in ruleGroups if group.get("enabled") == "false"]
         rules = self._getFromPolicyFile("rule")
         self.rules = [rule.get("name") for rule in rules]
         for rule in rules:
             if rule.get("enabled") == "false":
-                self.disabledRules.append(rule.get("name"))
+                self.disabledRules.append((rule.get("name"), rule.get("id")))
         if self.ruleFlag and self.ruleExceptions == None:
             self.disabledRules = self._handleUserExceptions(self.disabledRules, self.exceptions)
         elif self.ruleExceptions:
@@ -133,8 +134,9 @@ class SwgAuditAssistant:
     def _detectUnusedLists(self):
         usedLists = [usedList.get("id") for usedList in self._getFromPolicyFile("listValue") if usedList.get("id") != None]
         listsXmlFileNames = self._getXmlFromDir("lists")
-        self.unusedListsIDs = list(set(listsXmlFileNames) - set(usedLists))
-        self.unusedLists, self.unusedListsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, self.unusedListsIDs)
+        unusedListsIDs = list(set(listsXmlFileNames) - set(usedLists))
+        self.unusedLists, unusedListsIDs = self._resolveSettingsNames(self._settingsXmlFileNames, unusedListsIDs)
+        self.unusedLists = [entry for entry in zip(self.unusedLists, unusedListsIDs)]
         if self.listFlag and self.listExceptions == None:
             self.unusedLists = self._handleUserExceptions(self.unusedLists, self.exceptions)
         elif self.listExceptions:
@@ -149,21 +151,16 @@ class SwgAuditAssistant:
     def doReport(self):
         if self._policyXmlLoaded:
             self._archiveOldReports()
-            self._writeResults("unusedSettings.csv", "Unused Setting Name", self.unusedSettings, self.unusedSettingsIDs)
+            self._writeResults("unusedSettings.csv", "Unused Setting Name", self.unusedSettings)
             self._writeResults("disabledRules.csv", "Disabled Rule Name", self.disabledRules)
-            self._writeResults("unusedLists.csv", "Unused List Name", self.unusedLists, self.unusedListsIDs)
+            self._writeResults("unusedLists.csv", "Unused List Name", self.unusedLists)
 
-    def _writeResults(self, outfile, header, values, ids=None):
+    def _writeResults(self, outfile, header, values):
         with open(outfile, "w", newline="") as csv_file:
             writer = csv.writer(csv_file)
-            if ids:
-                writer.writerow([header, "ID"])
-                for entry in zip(values, ids):
-                    writer.writerow(entry)
-            else:
-                writer.writerow([header])
-                for row in values:
-                    writer.writerow([row])
+            writer.writerow([header, "ID"])
+            for entry in values:
+                writer.writerow(entry)
     
     def _getAttributeValueFromXml(self, PATH):
         settingsFile = ET.parse(PATH)
@@ -186,7 +183,7 @@ class SwgAuditAssistant:
             with open(user_exceptions, "r") as file:
                 exceptions = file.read().split("\n")
             for exception in exceptions:
-                items = [item for item in items if item.find(exception) == -1]
+                items = [item for item in items if item[0].find(exception) == -1]
             return items
         return items
  
